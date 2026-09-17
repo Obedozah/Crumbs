@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    container_name: node_backend
+    ports:
+      - "5000:5000"
+    command: gunicorn app:app --bind 0.0.0.0:5000
+
+  frontend:
+    build: ./frontend
+    container_name: react_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+      # allows hot loading will change later to nginx for cleaner running and access
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - backend
