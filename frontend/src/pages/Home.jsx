@@ -1,4 +1,4 @@
-function Home () {
+function Home() {
     return (
         <div>
             <h1>Welcome to Crumbs</h1>
