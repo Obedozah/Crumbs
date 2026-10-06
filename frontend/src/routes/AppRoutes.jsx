@@ -6,9 +6,11 @@ import Login from '../pages/Login';
 function AppRoutes() {
     return (
         <Routes>
-            <Route path="/home" element={<Home />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Login />} />
+            <Route element={<AppLayout />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<Login />} />
+            </Route>
         </Routes>
     );
 }
