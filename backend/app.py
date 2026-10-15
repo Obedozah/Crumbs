@@ -71,6 +71,7 @@ def test_makeUser():
 
 ### Change these dates for your analysis - This way get a more accurate Date/Time for LA 
 # [ Year, Month, Day ] 
+
 todayDate = [2026,10,05]
 
 def socalDate(todayDate, startend):
@@ -86,6 +87,30 @@ def socalDate(todayDate, startend):
         print("** Pick 'start' or 'end' - socal(todayDate, startend) **")
 
     return socal_date
+
+
+def API_token():
+    token_url = "https://ws-api.toasttab.com/authentication/v1/authentication/login" #to get the token
+
+    payload = { ## Secret Keys from toast
+        "clientId": clientID,
+        "clientSecret": clientSecret,
+        "userAccessType": "TOAST_MACHINE_CLIENT"
+    }
+
+    auth_response = requests.post(token_url, json=payload) #API Call
+    print()
+    print("Login status:", auth_response.status_code)
+
+    if auth_response.status_code != 200:
+        print(auth_response.text)
+        exit()
+    data = auth_response.json()
+    token = data["token"]["accessToken"]
+    print("-"*5 + "> Order API Successfully authenticated")
+
+    print(token) #return this token for other functions
+    
 
 
 def toastAPI_labor(startDate, endDate):
