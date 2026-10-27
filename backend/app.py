@@ -199,18 +199,11 @@ def pipline_orders(ordersJSON):
     return order_dictionary
 
 
-
-
+@app.route('/synicdata')
 def API_SYNC_Button():
     # How are we going to order this
     # Right now its just by day
     print( pipline_orders( toastAPI_orders() ) )
-
-            
-        
-    # print("update POS Data")
-
-API_SYNC_Button()
 
 
 
