@@ -1,4 +1,3 @@
-import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
@@ -9,7 +8,7 @@ import json
 import firebase_admin
 from firebase_admin import credentials, auth
 import requests
-from datetime import datetime
+from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
@@ -45,42 +44,25 @@ def test_makeUser():
     })
 
 
-# @app.route("/createUser", methods=['POST'])
-# def createUser():
-#     data = request.get_json()
-#     email = data.get("email")
-#     password = data.get("password")
-        
-#     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-#     try:
-#         newUser = auth.create_user(
-#             email = data.get("email"),
-#             password = pw_hash
-#         )
-
-#         return jsonify({
-#             "message": "User created successfully!",
-#             "uid": newUser.uid,
-#             "email": newUser.email
-#         }), 201
+def socalDate(startend):
+    #this function gives back the start and end of todays date. depending on what your asking for
+    today = date.today()
+    date_array = []
+    tempVal = ""
+    for index,char in enumerate(str(today)):
+        if char == "-" or index==len(str(today))-1:
+            date_array.append(int(tempVal))
+            tempVal=""
+        else:
+            tempVal = tempVal + char
     
-#     except auth.EmailAlreadyExistsError:
-#         return jsonify({"error": "This email is already registered."}), 400
-    
-
-### Change these dates for your analysis - This way get a more accurate Date/Time for LA 
-# [ Year, Month, Day ] 
-
-todayDate = [2026,10,05]
-
-def socalDate(todayDate, startend):
     if startend == "start":
-        startInput = datetime(startDate[0], startDate[1], startDate[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
+        startInput = datetime(date_array[0], date_array[1], date_array[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
         socal_date = startInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
         
     elif startend =="end":
-        endInput = datetime(endDate[0], endDate[1], endDate[2], 23, 59, 59, 999000, tzinfo=ZoneInfo("America/Los_Angeles"))
+        endInput = datetime(date_array[0], date_array[1], date_array[2], 23, 59, 59, 999000, tzinfo=ZoneInfo("America/Los_Angeles"))
         socal_date = endInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     else:
@@ -109,14 +91,13 @@ def API_token():
     token = data["token"]["accessToken"]
     print("-"*5 + "> Order API Successfully authenticated")
 
-    print(token) #return this token for other functions
+    return(token) #return this token for other functions
     
 
-
-def toastAPI_labor(startDate, endDate):
+def toastAPI_labor():
     
     ######################################
-    token = "USE API_TOKEN()"
+    token = API_token()
     ######################################
 
     # we got the token now we can move on to the orders_URL
@@ -130,17 +111,10 @@ def toastAPI_labor(startDate, endDate):
     # Labor Entries
     labor_url = "https://ws-api.toasttab.com/labor/v1/timeEntries"
 
-    ### Change these dates for your analysis - This way get a more accurate Date/Time for LA - Year, Month, Day
-    startInput = datetime(startDate[0], startDate[1], startDate[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
-    endInput = datetime(endDate[0], endDate[1], endDate[2], 23, 59, 59, 999000, tzinfo=ZoneInfo("America/Los_Angeles"))
-
-    start = startInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    end = endInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     ## so we can loops through the pages
     params = {
-        "startDate": start,
-        "endDate": end,
+        "startDate": socalDate("start"),
+        "endDate": socalDate("end"),
     }
 
     labor_response = requests.get(labor_url, headers=headers,params=params) #API Call
@@ -148,9 +122,10 @@ def toastAPI_labor(startDate, endDate):
 
     return all_labor
 
-def toastAPI_orders(startDate, endDate):
+
+def toastAPI_orders():
     ######################################
-    token = "USE API_TOKEN()"
+    token = API_token()
     ######################################
 
     # with token we can login and use orders_URL
@@ -160,13 +135,6 @@ def toastAPI_orders(startDate, endDate):
         "Toast-Restaurant-External-ID": "f8510642-286e-49c4-a5f9-31b00dd0433b" #Restaurant GUID
     }
 
-    ### Change these dates for your analysis - This way get a more accurate Date/Time for LA - Year, Month, Day
-    startInput = datetime(startDate[0], startDate[1], startDate[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
-    endInput = datetime(endDate[0], endDate[1], endDate[2], 23, 59, 59, 999000, tzinfo=ZoneInfo("America/Los_Angeles"))
-    
-    start = startInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    end = endInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     ############################################################
     all_orders = [] # gets orders from all pages
     ############################################################
@@ -175,8 +143,8 @@ def toastAPI_orders(startDate, endDate):
     pageNumber = 1
     while True:            
         params = {
-            "startDate": start,
-            "endDate": end,
+            "startDate": socalDate("start"),
+            "endDate": socalDate("end"),
             "pageSize": 100,
             "page": pageNumber
         }
@@ -193,6 +161,51 @@ def toastAPI_orders(startDate, endDate):
 
     # Returns JSON
     return all_orders
+
+
+def pipline_orders(ordersJSON):
+    print("Creating Dictionary . . . .")
+
+    order_dictionary = {}
+
+    for order in ordersJSON:
+        ## As long as the order is not voided
+        if order["voided"] == False: 
+            ## If the date is not in the dictionary yet
+            # todayDate = order["openedDate"]
+            todayDate = socalDate("end")
+            if todayDate not in order_dictionary:
+                order_dictionary[todayDate] = {
+                    "orders": 0,
+                    "sales": 0.0,
+                    "cctips": 0.0,
+                    "tax": 0.0,
+                    "labor": 0.0,
+                }
+
+            order_dictionary[todayDate]["orders"] +=1
+
+            addsale = order["checks"][0]["totalAmount"]
+            order_dictionary[todayDate]["sales"] = round(order_dictionary[todayDate]["sales"] + addsale, 2)
+
+            addtax = order["checks"][0]["taxAmount"]
+            order_dictionary[todayDate]["tax"] = round(order_dictionary[todayDate]["tax"] + addtax, 2)
+
+            tipsExist = order["checks"][0]["payments"]
+            if tipsExist:
+                addtips = tipsExist[0]["tipAmount"]
+                order_dictionary[todayDate]["cctips"] = round(order_dictionary[todayDate]["cctips"] + addtips, 2)
+
+    return order_dictionary
+
+
+@app.route('/synicdata')
+def API_SYNC_Button():
+    # How are we going to order this
+    # Right now its just by day
+    print( pipline_orders( toastAPI_orders() ) )
+
+
 
 
 if __name__ == '__main__':
