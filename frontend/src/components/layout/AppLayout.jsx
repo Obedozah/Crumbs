@@ -7,13 +7,15 @@ function AppLayout() {
     const { user } = useAuth();
 
     if (!user) {
-        return <Navigate to="/login" />;
+        return <Navigate to="/login" replace />;
     }
 
     return (
-        <div>
+        <div className="app-shell">
             <Navbar />
-            <Outlet />
+            <main className="page-main">
+                <Outlet />
+            </main>
             <Footer />
         </div>
     );

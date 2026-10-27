@@ -1,12 +1,18 @@
-function UnauthenticatedLinked() {
+import { Link, NavLink } from 'react-router-dom';
+
+function UnauthenticatedLinks() {
     return (
-        <ul>
-            <li><a href="/home">Home</a></li>
-            <li><a href="/about">About</a></li>
-            <li><a href="/login">Login</a></li>
-            <li><a href="/register">Register</a></li>
-        </ul>
+        <>
+            <ul className='navbar-links'>
+                <li><NavLink to="/" end>Home</NavLink></li>
+                <li><NavLink to="/contact">Contact</NavLink></li>
+                <li><NavLink to="/about">About</NavLink></li>
+            </ul>
+            <div className='navbar-actions'>
+                <Link to="/login" className='btn btn-primary btn-sm'>Log in</Link>
+            </div>
+        </>
     )
 }
 
-export default UnauthenticatedLinked;
+export default UnauthenticatedLinks;

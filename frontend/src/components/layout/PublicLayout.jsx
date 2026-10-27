@@ -4,9 +4,11 @@ import Navbar from './Navbar';
 
 function PublicLayout() {
     return (
-        <div>
+        <div className="app-shell">
             <Navbar />
-            <Outlet />
+            <main className="page-main">
+                <Outlet />
+            </main>
             <Footer />
         </div>
     );

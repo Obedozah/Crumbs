@@ -1,4 +1,5 @@
 import AppRoutes from './routes/AppRoutes.jsx'
+import './styles/App.css'
 
 function App() {
 
@@ -8,5 +9,3 @@ function App() {
 }
 
 export default App
-
-
