@@ -1,56 +1,26 @@
-import { createContext, useState, useContext } from "react";
+import { createContext, useState, useEffect, useContext } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "../lib/firebase";
 
 const AuthContext = createContext();
 
-const STORAGE_KEY = "crumbs-user";
-
-function loadUser() {
-    try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY));
-    } catch {
-        return null;
-    }
-}
-
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(loadUser);
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
 
-    function saveUser(nextUser) {
-        setUser(nextUser);
-        try {
-            if (nextUser) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
-            } else {
-                localStorage.removeItem(STORAGE_KEY);
-            }
-        } catch {
-            // storage unavailable, user just won't persist across refreshes
-        }
-    }
-
-    // Pseudo auth for now: any email/password works.
-    // Gonna replace with real auth api
-    async function login(email, _password) {
-        saveUser({ email });
-        return true;
-    }
-
-    async function register(email, _password) {
-        saveUser({ email });
-        return true;
-    }
-
-    async function loginWithGoogle() {
-        saveUser({ email: "demo@crumbs.app" });
-        return true;
-    }
+    useEffect(() => {
+        return onAuthStateChanged(auth, (firebaseUser) => {
+            setUser(firebaseUser);
+            setLoading(false);
+        });
+    }, []);
 
     function logout() {
-        saveUser(null);
+        return signOut(auth);
     }
 
     return (
-        <AuthContext.Provider value={{ user, login, register, loginWithGoogle, logout }}>
+        <AuthContext.Provider value={{ user, loading, logout }}>
             {children}
         </AuthContext.Provider>
     );

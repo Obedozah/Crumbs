@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 
-// Placeholder values until the Toast API is connected
+// TODO: replace with Toast data
 const stats = [
     { label: "Total Sales", value: "—" },
     { label: "Orders", value: "—" },
@@ -16,7 +16,7 @@ function Dashboard() {
             <header className="dashboard-header">
                 <div>
                     <p className="eyebrow">Dashboard</p>
-                    <h1>Welcome back</h1>
+                    <h1>Welcome back{user.displayName ? `, ${user.displayName}` : ""}</h1>
                     <p className="muted">Signed in as {user.email}</p>
                 </div>
                 <button type="button" className="btn btn-primary">Connect Toast</button>

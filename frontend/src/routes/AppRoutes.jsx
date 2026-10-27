@@ -6,6 +6,7 @@ import About from '../pages/About';
 import Contact from '../pages/Contact';
 import Register from '../pages/Register';
 import Login from '../pages/Login';
+import ForgotPassword from '../pages/ForgotPassword';
 import Dashboard from '../pages/Dashboard';
 import JerryTestPage from '../pages/JerryTestPage';
 
@@ -18,6 +19,7 @@ function AppRoutes() {
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/login" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/jerry-test" element={<JerryTestPage />} />
             </Route>
             <Route element={<AppLayout />}>
