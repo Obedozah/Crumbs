@@ -5,7 +5,7 @@ function Contact() {
 
     function handleSubmit(event) {
         event.preventDefault();
-        // Not wired to a backend yet
+        // TODO: send to backend
         setSent(true);
     }
 

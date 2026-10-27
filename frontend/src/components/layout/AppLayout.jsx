@@ -4,7 +4,11 @@ import Navbar from './Navbar';
 import Footer from './Footer';
 
 function AppLayout() {
-    const { user } = useAuth();
+    const { user, loading } = useAuth();
+
+    if (loading) {
+        return null;
+    }
 
     if (!user) {
         return <Navigate to="/login" replace />;
