@@ -1,8 +1,5 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
 import bcrypt
 import json
 import firebase_admin
@@ -10,6 +7,12 @@ from firebase_admin import credentials, auth
 import requests
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+clientID = os.getenv('clientID')
+clientSecret = os.getenv('clientSecret')
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
@@ -176,25 +179,107 @@ def pipline_orders(ordersJSON):
             todayDate = socalDate("end")
             if todayDate not in order_dictionary:
                 order_dictionary[todayDate] = {
-                    "orders": 0,
-                    "sales": 0.0,
-                    "cctips": 0.0,
-                    "tax": 0.0,
-                    "labor": 0.0,
+                    "orders": [],
+                    # "labor": [],                
                 }
 
-            order_dictionary[todayDate]["orders"] +=1
+            # One Order - Level#1
+            orderItem = {
+                        "businessDate": order["businessDate"],
+                        "checks": [
+                            {
+                                "amount": order["checks"][0]["amount"], # check ammount
+                                "appliedDiscounts": order["checks"][0]["appliedDiscounts"],
+                                "closedDate": order["checks"][0]["closedDate"],
+                                "createDate": order["checks"][0]["createdDate"],
+                                "customer": order["checks"][0]["customer"], # prob wont need
+                                "payments": [],
+                                "selections": [],
+                                "tabName": order["checks"][0]["tabName"],
+                                "taxAmount": order["checks"][0]["taxAmount"],
+                                "taxExempt": order["checks"][0]["taxExempt"],
+                                "totalAmount": order["checks"][0]["totalAmount"]
+                            }
+                        ],
+                        "closedDate": order["checks"][0]["closedDate"],
+                        "createdDate": order["checks"][0]["createdDate"],
+                        "guid": order["guid"],
+                        "modifiedDate": order["modifiedDate"],
+                        "openedDate": order["openedDate"],
+                        "server": {"guid": order["server"]["guid"]},
+                        "source": order["source"],
+            }
 
-            addsale = order["checks"][0]["totalAmount"]
-            order_dictionary[todayDate]["sales"] = round(order_dictionary[todayDate]["sales"] + addsale, 2)
+            # Array of payments in a orders - Level#3 (Orders->checks->payments)
+            for payment in order["checks"][0]["payments"]:
+                paymentItem = {
+                    "guid": payment["guid"],
+                    "amount": payment["amount"],
+                    "surchargeAmount": payment["surchargeAmount"],
+                    "tipAmount": payment["tipAmount"],
+                    "checkGuid": payment["checkGuid"],
+                    "orderGuid": payment["orderGuid"],
+                    "originalProcessingFee": payment["originalProcessingFee"],
+                    "paymentStatus": payment["paymentStatus"],
+                    "refund": payment["refund"],
+                    "refundStatus": payment["refundStatus"],
+                    # "server": {"guid": payment["server"]["guid"]}, 'NoneType' object is not subscriptable
+                    "type": payment["type"]
+                }
+                orderItem["checks"][0]["payments"].append(paymentItem)
 
-            addtax = order["checks"][0]["taxAmount"]
-            order_dictionary[todayDate]["tax"] = round(order_dictionary[todayDate]["tax"] + addtax, 2)
+            for select in order["checks"][0]["selections"]:
+                selectItems = {
+                    # You need to make sure these are the right data first befor finnishing
+                    "appliedDiscounts": select["appliedDiscounts"],
+                    "appliedTaxes": select["appliedTaxes"],
+                    "displayName": select["displayName"],
+                    "item": {
+                        "guid": select["item"]["guid"],
+                        "multiLocationId": select["item"]["multiLocationId"]
+                        },
+                    "itemGroup": {
+                        "guid": select["itemGroup"]["guid"],
+                        "multiLocationId": select["itemGroup"]["multiLocationId"]
+                    },
+                    "modifiers": [], # Need to append data to this as well,
+                    "preDiscountPrice": select["preDiscountPrice"],
+                    "price": select["price"],
+                    "quantity": select["quantity"],
+                    "receiptLinePrice": select["receiptLinePrice"],
+                    "tax": select["tax"]                        
+                    }
 
-            tipsExist = order["checks"][0]["payments"]
-            if tipsExist:
-                addtips = tipsExist[0]["tipAmount"]
-                order_dictionary[todayDate]["cctips"] = round(order_dictionary[todayDate]["cctips"] + addtips, 2)
+                for mods in select["modifiers"]:
+                    modItems = {
+                    "guid": mods["guid"],
+                    "displayName": mods["displayName"],
+                    "item": {
+                        # "guid": mods["item"]["guid"], 'NoneType' object is not subscriptable
+                        # "multiLocationId": mods["item"]["multiLocationId"] 'NoneType' object is not subscriptable
+                    },
+                    "optionGroup": {
+                        # "guid": mods["optionGroup"]["guid"], 'NoneType' object is not subscriptable
+                        # "multiLocationId": mods["optionGroup"]["multiLocationId"] 'NoneType' object is not subscriptable
+                    },
+                    "price": mods["price"],
+                    "quantity": mods["quantity"],
+                    "receiptLinePrice": mods["receiptLinePrice"],
+                    "modifiers": [],
+                    }
+
+                    for innerMods in mods["modifiers"]:
+                        #1 Adding sub mods to mods
+                        modItems["modifiers"].append(innerMods)
+
+                    #2 Adding mods to selections[]
+                    selectItems["modifiers"].append(modItems)
+
+                #3 Adding to selections to check[]     
+                orderItem["checks"][0]["selections"].append(selectItems)
+
+            #4 Adding the orders to the main Dictionary
+            order_dictionary[todayDate]["orders"].append(orderItem)
 
     return order_dictionary
 
@@ -204,6 +289,11 @@ def API_SYNC_Button():
     # How are we going to order this
     # Right now its just by day
     print( pipline_orders( toastAPI_orders() ) )
+
+@app.route('/getsales')
+def get_sales():
+    data = pipline_orders( toastAPI_orders() )
+    return data["sales"]
 
 
 

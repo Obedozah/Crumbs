@@ -8,6 +8,10 @@ const stats = [
     { label: "Top Item", value: "—" },
 ];
 
+()=>{
+    
+}
+
 function Dashboard() {
     const { user } = useAuth();
 
