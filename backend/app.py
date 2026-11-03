@@ -7,6 +7,8 @@ import firebase_admin
 import requests
 import bcrypt
 import json
+from firebase_admin import firestore
+from firebase_config import db
 import os
 from dotenv import load_dotenv
 
@@ -17,6 +19,8 @@ clientSecret = os.getenv('clientSecret')
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
+
+db = firestore.client()
 
 # firebase connection
 # cred = credentials.Certificate("serviceAccountKey.json") # Add Key
@@ -297,3 +301,21 @@ def get_sales():
 if __name__ == '__main__':
     print(app.url_map)
     app.run(port=5000, debug=True)
+
+
+
+
+
+def upload_orders(order_dictionary, business_id):
+
+    orders_ref = (
+        db.collection("businesses")
+          .document(business_id)
+          .collection("orders")
+    )
+
+    for date_data in order_dictionary.values():
+        for order_id, order_data in date_data["orders"].items():
+
+            orders_ref.document(order_id).set(order_data)
+
