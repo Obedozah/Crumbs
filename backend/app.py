@@ -6,13 +6,16 @@ from zoneinfo import ZoneInfo
 import bcrypt
 import json
 import firebase_admin
-from firebase_admin import credentials, auth
+from firebase_admin import firestore
 import requests
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
+from firebase_config import db
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
+
+db = firestore.client()
 
 # firebase connection
 # cred = credentials.Certificate("serviceAccountKey.json") # Add Key
@@ -211,3 +214,21 @@ def API_SYNC_Button():
 if __name__ == '__main__':
     print(app.url_map)
     app.run(port=5000, debug=True)
+
+
+
+
+
+def upload_orders(order_dictionary, business_id):
+
+    orders_ref = (
+        db.collection("businesses")
+          .document(business_id)
+          .collection("orders")
+    )
+
+    for date_data in order_dictionary.values():
+        for order_id, order_data in date_data["orders"].items():
+
+            orders_ref.document(order_id).set(order_data)
+
