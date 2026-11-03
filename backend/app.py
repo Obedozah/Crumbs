@@ -1,15 +1,16 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import bcrypt
-import json
-import firebase_admin
 from firebase_admin import credentials, auth
-import requests
+from flask import Flask, request, jsonify
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
+from flask_cors import CORS
+import firebase_admin
+import requests
+import bcrypt
+import json
 import os
 from dotenv import load_dotenv
 
+# API Keys
 load_dotenv()
 clientID = os.getenv('clientID')
 clientSecret = os.getenv('clientSecret')
@@ -23,29 +24,7 @@ CORS(app, origins=["http://localhost:5173"])
 
 @app.route('/test')
 def test():
-    return 'sup'
-
-
-@app.route('/createUser', methods=['POST'])
-def test_makeUser():
-    email = request.form.get("email")
-    password = request.form.get("password")
-
-    # Empty email/pass returns error
-    if (not email or not password):
-        return (jsonify({"error": "Missing email or password"}), 400)
-
-    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-    print("-"*40)
-    print("Encrypted password:\n" + pw_hash + "\nplz dont crack :)")
-    print("-"*40)
-
-    return jsonify({
-        "email": email,
-        "message": "Request received"
-    })
-
+    return "sup"
 
 
 def socalDate(startend):
@@ -176,9 +155,8 @@ def pipline_orders(ordersJSON):
         if order["voided"] == False: 
             ## If the date is not in the dictionary yet
             # todayDate = order["openedDate"]
-            todayDate = socalDate("end")
-            if todayDate not in order_dictionary:
-                order_dictionary[todayDate] = {
+            if socalDate() not in order_dictionary:
+                order_dictionary[socalDate()] = {
                     "orders": [],
                     # "labor": [],                
                 }
@@ -212,6 +190,7 @@ def pipline_orders(ordersJSON):
 
             # Array of payments in a orders - Level#3 (Orders->checks->payments)
             for payment in order["checks"][0]["payments"]:
+                
                 paymentItem = {
                     "guid": payment["guid"],
                     "amount": payment["amount"],
@@ -229,14 +208,19 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["payments"].append(paymentItem)
 
             for select in order["checks"][0]["selections"]:
+
+                # to fix this error: 'NoneType' object is not subscriptable
+                item = select.get("item") or {}
+                ##############
+
                 selectItems = {
                     # You need to make sure these are the right data first befor finnishing
                     "appliedDiscounts": select["appliedDiscounts"],
                     "appliedTaxes": select["appliedTaxes"],
                     "displayName": select["displayName"],
                     "item": {
-                        "guid": select["item"]["guid"],
-                        "multiLocationId": select["item"]["multiLocationId"]
+                        "guid": item.get("guid"), #select["item"]["guid"],
+                        "multiLocationId": item.get("multiLocationId") #select["item"]["multiLocationId"]
                         },
                     "itemGroup": {
                         "guid": select["itemGroup"]["guid"],
@@ -251,16 +235,22 @@ def pipline_orders(ordersJSON):
                     }
 
                 for mods in select["modifiers"]:
+
+                    # to fix this error: 'NoneType' object is not subscriptable
+                    item = mods.get("item") or {}
+                    optionGroup = mods.get("optionGroup") or {}
+                    ##############
+                    
                     modItems = {
                     "guid": mods["guid"],
                     "displayName": mods["displayName"],
                     "item": {
-                        # "guid": mods["item"]["guid"], 'NoneType' object is not subscriptable
-                        # "multiLocationId": mods["item"]["multiLocationId"] 'NoneType' object is not subscriptable
+                        "guid": item.get("guid"), #select["mods"]["item"]["guid"],
+                        "multiLocationId": item.get("multiLocationId") #select["mods"]["item"]["multiLocationId"]
                     },
                     "optionGroup": {
-                        # "guid": mods["optionGroup"]["guid"], 'NoneType' object is not subscriptable
-                        # "multiLocationId": mods["optionGroup"]["multiLocationId"] 'NoneType' object is not subscriptable
+                        "guid": optionGroup.get("guid"), # mods["optionGroup"]["guid"], 'NoneType' object is not subscriptable
+                        "multiLocationId": optionGroup.get("multiLocationId")  # mods["optionGroup"]["multiLocationId"] 'NoneType' object is not subscriptable
                     },
                     "price": mods["price"],
                     "quantity": mods["quantity"],
@@ -279,23 +269,25 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["selections"].append(selectItems)
 
             #4 Adding the orders to the main Dictionary
-            order_dictionary[todayDate]["orders"].append(orderItem)
+            order_dictionary[socalDate()]["orders"].append(orderItem)
 
     return order_dictionary
 
 
 @app.route('/synicdata')
 def API_SYNC_Button():
-    # How are we going to order this
-    # Right now its just by day
-    print( pipline_orders( toastAPI_orders() ) )
+    # Get the last date that was added to the DB
+    # Add all days till the current Day
+    # If Date exist update date by adding the new orders to it(last date added == today) - if we missed some data before store close
+
+    print( pipline_orders( toastAPI_orders() ) ) # change this to push to DB
+
+
 
 @app.route('/getsales')
 def get_sales():
     data = pipline_orders( toastAPI_orders() )
     return data["sales"]
-
-
 
 
 if __name__ == '__main__':
