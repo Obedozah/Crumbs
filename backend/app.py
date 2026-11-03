@@ -190,6 +190,8 @@ def pipline_orders(ordersJSON):
 
             # Array of payments in a orders - Level#3 (Orders->checks->payments)
             for payment in order["checks"][0]["payments"]:
+
+                server = payment.get("server") or {} 
                 
                 paymentItem = {
                     "guid": payment["guid"],
@@ -202,14 +204,16 @@ def pipline_orders(ordersJSON):
                     "paymentStatus": payment["paymentStatus"],
                     "refund": payment["refund"],
                     "refundStatus": payment["refundStatus"],
-                    # "server": {"guid": payment["server"]["guid"]}, 'NoneType' object is not subscriptable
+                    "server": {
+                        "guid": server.get("guid"), #payment["server"]["guid"] 'NoneType' object is not subscriptable
+                    }, 
                     "type": payment["type"]
                 }
                 orderItem["checks"][0]["payments"].append(paymentItem)
 
             for select in order["checks"][0]["selections"]:
 
-                # to fix this error: 'NoneType' object is not subscriptable
+                #### 'NoneType' fix
                 item = select.get("item") or {}
                 ##############
 
@@ -236,7 +240,7 @@ def pipline_orders(ordersJSON):
 
                 for mods in select["modifiers"]:
 
-                    # to fix this error: 'NoneType' object is not subscriptable
+                    #### 'NoneType' fix
                     item = mods.get("item") or {}
                     optionGroup = mods.get("optionGroup") or {}
                     ##############
