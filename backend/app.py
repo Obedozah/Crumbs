@@ -1,6 +1,6 @@
 from firebase_admin import credentials, auth
 from flask import Flask, request, jsonify
-from datetime import datetime, date
+from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask_cors import CORS
 import firebase_admin
@@ -29,15 +29,8 @@ def test():
 
 def socalDate(startend):
     #this function gives back the start and end of todays date. depending on what your asking for
-    today = date.today()
-    date_array = []
-    tempVal = ""
-    for index,char in enumerate(str(today)):
-        if char == "-" or index==len(str(today))-1:
-            date_array.append(int(tempVal))
-            tempVal=""
-        else:
-            tempVal = tempVal + char
+    today = datetime.now(ZoneInfo("America/Los_Angeles"))
+    date_array = [today.year, today.month, today.day]
     
     if startend == "start":
         startInput = datetime(date_array[0], date_array[1], date_array[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
@@ -155,8 +148,9 @@ def pipline_orders(ordersJSON):
         if order["voided"] == False: 
             ## If the date is not in the dictionary yet
             # todayDate = order["openedDate"]
-            if socalDate() not in order_dictionary:
-                order_dictionary[socalDate()] = {
+            todayDate = socalDate("end")
+            if todayDate not in order_dictionary:
+                order_dictionary[todayDate] = {
                     "orders": [],
                     # "labor": [],                
                 }
@@ -273,9 +267,76 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["selections"].append(selectItems)
 
             #4 Adding the orders to the main Dictionary
-            order_dictionary[socalDate()]["orders"].append(orderItem)
+            order_dictionary[todayDate]["orders"].append(orderItem)
 
     return order_dictionary
+
+
+def pipeline_labor(laborJSON):
+    print("Creating Labor Dictionary . . . .")
+
+    labor_dictionary = {}
+
+    for entry in laborJSON:
+
+        if entry["deleted"] == False:
+            todayDate = socalDate("end")
+            if todayDate not in labor_dictionary:
+                labor_dictionary[todayDate] = {
+                    "labor": [],
+                }
+
+
+            laborItem = {
+                "guid": entry["guid"],
+                "businessDate": entry["businessDate"],
+                "createdDate": entry["createdDate"],
+                "modifiedDate": entry["modifiedDate"],
+                "inDate": entry["inDate"],
+                "outDate": entry["outDate"],
+                "autoClockedOut": entry["autoClockedOut"],
+                "regularHours": entry["regularHours"],
+                "overtimeHours": entry["overtimeHours"],
+                "hourlyWage": entry["hourlyWage"],
+                "declaredCashTips": entry["declaredCashTips"],
+                "nonCashTips": entry["nonCashTips"],
+                "nonCashTipsRoundingLoss": entry["nonCashTipsRoundingLoss"],
+                "cashGratuityServiceCharges": entry["cashGratuityServiceCharges"],
+                "nonCashGratuityServiceCharges": entry["nonCashGratuityServiceCharges"],
+                "tipsWithheld": entry["tipsWithheld"],
+                "nonCashSales": entry["nonCashSales"],
+                "cashSales": entry["cashSales"],
+                "employeeReference": {
+                    "guid": entry["employeeReference"]["guid"]
+                } if entry["employeeReference"] is not None else None,
+                "jobReference": {
+                    "guid": entry["jobReference"]["guid"]
+                } if entry["jobReference"] is not None else None,
+                "shiftReference": {
+                    "guid": entry["shiftReference"]["guid"]
+                } if entry["shiftReference"] is not None else None,
+                "breaks": [],
+            }
+
+
+            for entry_break in entry["breaks"]:
+                breakItem = {
+                    "guid": entry_break["guid"],
+                    "breakType": {
+                        "guid": entry_break["breakType"]["guid"]
+                    } if entry_break["breakType"] is not None else None,
+                    "paid": entry_break["paid"],
+                    "inDate": entry_break["inDate"],
+                    "outDate": entry_break["outDate"],
+                    "missed": entry_break["missed"],
+                    "waived": entry_break["waived"],
+                    "auditResponse": entry_break["auditResponse"],
+                }
+                laborItem["breaks"].append(breakItem)
+
+            labor_dictionary[todayDate]["labor"].append(laborItem)
+
+    return labor_dictionary
 
 
 @app.route('/synicdata')
@@ -284,8 +345,15 @@ def API_SYNC_Button():
     # Add all days till the current Day
     # If Date exist update date by adding the new orders to it(last date added == today) - if we missed some data before store close
 
-    print( pipline_orders( toastAPI_orders() ) ) # change this to push to DB
+    data = pipline_orders(toastAPI_orders())
+    labor_data = pipeline_labor(toastAPI_labor())
 
+    for todayDate in labor_data:
+        if todayDate not in data:
+            data[todayDate] = {}
+        data[todayDate]["labor"] = labor_data[todayDate]["labor"]
+
+    return jsonify(data)
 
 
 @app.route('/getsales')
