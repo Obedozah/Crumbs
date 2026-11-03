@@ -1,7 +1,8 @@
 import { Navigate, useNavigate } from 'react-router-dom';
-import { SignUpAuthScreen, GoogleSignInButton } from '@firebase-oss/ui-react';
+import { GoogleSignInButton } from '@firebase-oss/ui-react';
 import { useAuth } from '../context/AuthContext';
 import AuthCard from '../components/ui/AuthCard';
+import SignUpScreen from '../components/ui/SignUpScreen';
 
 function Register() {
     const { user, loading } = useAuth();
@@ -17,12 +18,12 @@ function Register() {
 
     return (
         <AuthCard>
-            <SignUpAuthScreen
+            <SignUpScreen
                 onSignUp={() => navigate("/dashboard")}
                 onSignInClick={() => navigate("/login")}
             >
                 <GoogleSignInButton themed="neutral" />
-            </SignUpAuthScreen>
+            </SignUpScreen>
         </AuthCard>
     );
 }
