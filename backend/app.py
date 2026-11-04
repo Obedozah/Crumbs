@@ -26,30 +26,29 @@ def test():
     return "sup"
 
 
-def socalDate(startend):
-    #this function gives back the start and end of todays date. depending on what your asking for
-    today = date.today()
-    date_array = []
-    tempVal = ""
-    for index,char in enumerate(str(today)):
-        if char == "-" or index==len(str(today))-1:
-            date_array.append(int(tempVal))
-            tempVal=""
-        else:
-            tempVal = tempVal + char
-    
+def socalDate(startend=None):
+    socal_tz = ZoneInfo("America/Los_Angeles")
+    today = datetime.now(socal_tz)
+
+    if startend is None:
+        return today.strftime("%Y-%m-%d")
+
     if startend == "start":
-        startInput = datetime(date_array[0], date_array[1], date_array[2], 0, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")) # 2026, 1, 1
-        socal_date = startInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        
-    elif startend =="end":
-        endInput = datetime(date_array[0], date_array[1], date_array[2], 23, 59, 59, 999000, tzinfo=ZoneInfo("America/Los_Angeles"))
-        socal_date = endInput.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
+        socal_date = today.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    elif startend == "end":
+        socal_date = today.replace(
+            hour=23, minute=59, second=59, microsecond=999000
+        )
     else:
-        print("** Pick 'start' or 'end' - socal(todayDate, startend) **")
+        raise ValueError("Pick 'start' or 'end'")
 
-    return socal_date
+    return (
+        socal_date.astimezone(ZoneInfo("UTC"))
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def API_token():
@@ -272,14 +271,15 @@ def pipline_orders(ordersJSON):
 
     return order_dictionary
 
-
 @app.route('/synicdata')
 def API_SYNC_Button():
     # Get the last date that was added to the DB
     # Add all days till the current Day
     # If Date exist update date by adding the new orders to it(last date added == today) - if we missed some data before store close
 
-    print( pipline_orders( toastAPI_orders() ) ) # change this to push to DB
+    order_dictionary = pipline_orders( toastAPI_orders() )
+    upload_orders(order_dictionary, "business_abc123")
+
 
 
 
