@@ -1,12 +1,14 @@
-import firebase_admin
-import requests
-import bcrypt
+from datetime import date, datetime
 import json
-from flask import Flask, request, jsonify
-from datetime import datetime, date
 from zoneinfo import ZoneInfo
+
+import bcrypt
+import firebase_admin
+from firebase_admin import credentials, firestore, initialize_app
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from firebase_admin import firestore
+import requests
+
 from firebase_config import db
 import os
 from dotenv import load_dotenv
@@ -18,12 +20,6 @@ clientSecret = os.getenv('clientSecret')
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
-
-db = firestore.client()
-
-# firebase connection
-# cred = credentials.Certificate("serviceAccountKey.json") # Add Key
-# firebase_admin.initialize_app(cred)
 
 @app.route('/test')
 def test():
