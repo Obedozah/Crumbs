@@ -1,25 +1,18 @@
-from flask import Flask, request, jsonify
+from datetime import date, datetime
+import json
+from zoneinfo import ZoneInfo
+
+import bcrypt
+import firebase_admin
+from firebase_admin import credentials, firestore, initialize_app
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import bcrypt
-import json
-import firebase_admin
-from firebase_admin import firestore
-import requests
-from datetime import datetime, date
-from zoneinfo import ZoneInfo
+
 from firebase_config import db
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
-
-db = firestore.client()
-
-# firebase connection
-# cred = credentials.Certificate("serviceAccountKey.json") # Add Key
-# firebase_admin.initialize_app(cred)
 
 @app.route('/test')
 def test():

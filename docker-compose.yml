@@ -2,6 +2,8 @@ services:
   backend:
     build: ./backend
     container_name: node_backend
+    volumes:
+      - ./backend:/app
     ports:
       - "5000:5000"
     command: gunicorn app:app --bind 0.0.0.0:5000
