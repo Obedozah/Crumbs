@@ -1,6 +1,7 @@
 from firebase_admin import credentials, auth
 from flask import Flask, request, jsonify
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 from flask_cors import CORS
 import firebase_admin
@@ -113,7 +114,6 @@ def toastAPI_orders():
     ############################################################
     all_orders = [] # gets orders from all pages
     ############################################################
-
     ## so we can loops through the pages
     pageNumber = 1
     while True:            
@@ -272,69 +272,65 @@ def pipline_orders(ordersJSON):
     return order_dictionary
 
 
-def pipeline_labor(laborJSON):
+
+# Usingin 2x multiple for overtime hours, this is changeable
+def pipeline_labor(laborJSON, overtimeMultiplier=2):
     print("Creating Labor Dictionary . . . .")
 
-    labor_dictionary = {}
+    labor_dictionary = {
+        "labor": {},
+    }
+
+    periodStart = socalDate("start")
+    periodEnd = socalDate("end")
+    periodId = periodStart[:10]
+    regularHours = Decimal("0")
+    overtimeHours = Decimal("0")
+    regularCost = Decimal("0")
+    overtimeCost = Decimal("0")
+    overtimeMultiplier = Decimal(str(overtimeMultiplier))
+    if not overtimeMultiplier.is_finite() or overtimeMultiplier <= 0:
+        raise ValueError("Overtime multiplier must be a positive number")
+
 
     for entry in laborJSON:
+        if entry["deleted"]:
+            continue
 
-        if entry["deleted"] == False:
-            todayDate = socalDate("end")
-            if todayDate not in labor_dictionary:
-                labor_dictionary[todayDate] = {
-                    "labor": [],
-                }
+        entryRegularHours = Decimal(str(entry["regularHours"] or 0))
+        entryOvertimeHours = Decimal(str(entry["overtimeHours"] or 0))
+        regularHours += entryRegularHours
+        overtimeHours += entryOvertimeHours
 
+        if entry["hourlyWage"] is None:
+            if entryRegularHours > 0:
+                regularCost = None
+            if entryOvertimeHours > 0:
+                overtimeCost = None
+        else:
+            hourlyWage = Decimal(str(entry["hourlyWage"]))
+            if regularCost is not None:
+                regularCost += entryRegularHours * hourlyWage
+            if overtimeCost is not None:
+                overtimeCost += entryOvertimeHours * hourlyWage * overtimeMultiplier
 
-            laborItem = {
-                "guid": entry["guid"],
-                "businessDate": entry["businessDate"],
-                "createdDate": entry["createdDate"],
-                "modifiedDate": entry["modifiedDate"],
-                "inDate": entry["inDate"],
-                "outDate": entry["outDate"],
-                "autoClockedOut": entry["autoClockedOut"],
-                "regularHours": entry["regularHours"],
-                "overtimeHours": entry["overtimeHours"],
-                "hourlyWage": entry["hourlyWage"],
-                "declaredCashTips": entry["declaredCashTips"],
-                "nonCashTips": entry["nonCashTips"],
-                "nonCashTipsRoundingLoss": entry["nonCashTipsRoundingLoss"],
-                "cashGratuityServiceCharges": entry["cashGratuityServiceCharges"],
-                "nonCashGratuityServiceCharges": entry["nonCashGratuityServiceCharges"],
-                "tipsWithheld": entry["tipsWithheld"],
-                "nonCashSales": entry["nonCashSales"],
-                "cashSales": entry["cashSales"],
-                "employeeReference": {
-                    "guid": entry["employeeReference"]["guid"]
-                } if entry["employeeReference"] is not None else None,
-                "jobReference": {
-                    "guid": entry["jobReference"]["guid"]
-                } if entry["jobReference"] is not None else None,
-                "shiftReference": {
-                    "guid": entry["shiftReference"]["guid"]
-                } if entry["shiftReference"] is not None else None,
-                "breaks": [],
-            }
+    if regularCost is not None:
+        regularCost = regularCost.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if overtimeCost is not None:
+        overtimeCost = overtimeCost.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    totalCost = None
+    if regularCost is not None and overtimeCost is not None:
+        totalCost = regularCost + overtimeCost
 
-
-            for entry_break in entry["breaks"]:
-                breakItem = {
-                    "guid": entry_break["guid"],
-                    "breakType": {
-                        "guid": entry_break["breakType"]["guid"]
-                    } if entry_break["breakType"] is not None else None,
-                    "paid": entry_break["paid"],
-                    "inDate": entry_break["inDate"],
-                    "outDate": entry_break["outDate"],
-                    "missed": entry_break["missed"],
-                    "waived": entry_break["waived"],
-                    "auditResponse": entry_break["auditResponse"],
-                }
-                laborItem["breaks"].append(breakItem)
-
-            labor_dictionary[todayDate]["labor"].append(laborItem)
+    labor_dictionary["labor"][periodId] = {
+        "periodStart": periodStart,
+        "periodEnd": periodEnd,
+        "regularHours": float(regularHours),
+        "overtimeHours": float(overtimeHours),
+        "regularCost": float(regularCost) if regularCost is not None else None,
+        "overtimeCost": float(overtimeCost) if overtimeCost is not None else None,
+        "totalCost": float(totalCost) if totalCost is not None else None,
+    }
 
     return labor_dictionary
 
@@ -348,13 +344,12 @@ def API_SYNC_Button():
     data = pipline_orders(toastAPI_orders())
     labor_data = pipeline_labor(toastAPI_labor())
 
-    for todayDate in labor_data:
-        if todayDate not in data:
-            data[todayDate] = {}
-        data[todayDate]["labor"] = labor_data[todayDate]["labor"]
+    todayDate = socalDate("end")
+    if todayDate not in data:
+        data[todayDate] = {}
+    data[todayDate]["labor"] = labor_data["labor"]
 
     return jsonify(data)
-
 
 @app.route('/getsales')
 def get_sales():
