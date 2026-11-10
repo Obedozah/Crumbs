@@ -1,15 +1,16 @@
+import os
 import firebase_admin
 import requests
 import bcrypt
 import json
 from flask import Flask, request, jsonify
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from zoneinfo import ZoneInfo
 from flask_cors import CORS
-from firebase_admin import firestore
+from firebase_admin import credentials, initialize_app, firestore
 from firebase_config import db
-import os
 from dotenv import load_dotenv
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 # API Keys
 load_dotenv()
@@ -19,7 +20,6 @@ clientSecret = os.getenv('clientSecret')
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
 
-db = firestore.client()
 
 # firebase connection
 # cred = credentials.Certificate("serviceAccountKey.json") # Add Key
@@ -153,13 +153,14 @@ def pipline_orders(ordersJSON):
     order_dictionary = {}
 
     for order in ordersJSON:
+        currentDate = socalDate() 
         ## As long as the order is not voided
         if order["voided"] == False: 
             ## If the date is not in the dictionary yet
             # todayDate = order["openedDate"]
-            if socalDate() not in order_dictionary:
-                order_dictionary[socalDate()] = {
-                    "orders": [],
+            if currentDate not in order_dictionary:
+                order_dictionary[currentDate] = {
+                    "orders": {},
                     # "labor": [],                
                 }
 
@@ -170,7 +171,6 @@ def pipline_orders(ordersJSON):
                             {
                                 "amount": order["checks"][0]["amount"], # check ammount
                                 "appliedDiscounts": order["checks"][0]["appliedDiscounts"],
-                                "closedDate": order["checks"][0]["closedDate"],
                                 "createDate": order["checks"][0]["createdDate"],
                                 "customer": order["checks"][0]["customer"], # prob wont need
                                 "payments": [],
@@ -182,7 +182,7 @@ def pipline_orders(ordersJSON):
                             }
                         ],
                         "closedDate": order["checks"][0]["closedDate"],
-                        "createdDate": order["checks"][0]["createdDate"],
+                        "createdDate": currentDate,
                         "guid": order["guid"],
                         "modifiedDate": order["modifiedDate"],
                         "openedDate": order["openedDate"],
@@ -271,9 +271,11 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["selections"].append(selectItems)
 
             #4 Adding the orders to the main Dictionary
-            order_dictionary[socalDate()]["orders"].append(orderItem)
+            # order_dictionary[socalDate()]["orders"].append(orderItem)
+            order_dictionary[currentDate]["orders"][orderItem["guid"]] = orderItem
 
     return order_dictionary
+
 
 @app.route('/synicdata')
 def API_SYNC_Button():
@@ -283,14 +285,38 @@ def API_SYNC_Button():
 
     order_dictionary = pipline_orders( toastAPI_orders() )
     upload_orders(order_dictionary, "business_abc123")
+    # upload_orders(order_dictionary, "business_abc123")
+    return order_dictionary
 
 
 
 
-@app.route('/getsales')
-def get_sales():
+@app.route('/pushsales')
+def push_sales():
     data = pipline_orders( toastAPI_orders() )
     return data["sales"]
+
+@app.route('/getSales')
+def get_sales():
+    start = datetime(2026,10,3, tzinfo=timezone.utc)
+    end = datetime(2026,11,9, tzinfo=timezone.utc)
+
+
+    query = firestore.client().collection("businesses/business_abc123/orders")
+    query = query.where(
+        filter=FieldFilter("createdDate", ">=", start)
+    )
+    query = query.where(
+        filter=FieldFilter("createdDate", "<", end)
+    )
+    docs = query.stream()
+
+    return jsonify([
+        {"id": doc.id, **doc.to_dict()}
+        for doc in docs
+    ])
+
+
 
 
 if __name__ == '__main__':
