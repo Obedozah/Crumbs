@@ -142,9 +142,13 @@ def toastAPI_orders():
     # Returns JSON
     return all_orders
 
+#region PipeLines and related helper
 
 def pipline_orders(ordersJSON):
     print("Creating Dictionary . . . .")
+
+    # changed to a var insetad of repeated calls to resduce overhead
+    call_time = socalDate()
 
     order_dictionary = {}
 
@@ -153,8 +157,8 @@ def pipline_orders(ordersJSON):
         if order["voided"] == False: 
             ## If the date is not in the dictionary yet
             # todayDate = order["openedDate"]
-            if socalDate() not in order_dictionary:
-                order_dictionary[socalDate()] = {
+            if call_time not in order_dictionary:
+                order_dictionary[call_time] = {
                     "orders": [],
                     # "labor": [],                
                 }
@@ -267,10 +271,145 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["selections"].append(selectItems)
 
             #4 Adding the orders to the main Dictionary
-            order_dictionary[socalDate()]["orders"].append(orderItem)
+            order_dictionary[call_time]["orders"].append(orderItem)
 
     return order_dictionary
 
+def upload_orders(order_dictionary, business_id):
+
+    orders_ref = (
+        db.collection("businesses")
+          .document(business_id)
+          .collection("orders")
+    )
+
+    for date_data in order_dictionary.values():
+        for order_id, order_data in date_data["orders"].items():
+
+            orders_ref.document(order_id).set(order_data)
+
+def pipeline_TimeEntries(timeJSON):
+    print("Creating Dictionary . . . .")
+
+    entries_dictionary = {}
+
+    for entry in timeJSON:
+
+        # Get the employee ID
+        employee = entry.get("employeeReference") or {}
+        employee_id = employee.get("guid")
+
+        # Get associated time entry ID
+        time_entry_id = entry.get("guid")
+
+        # Skip entries without required IDs
+        # since these are needed no point of
+        # using entries without one or the other
+        if not employee_id or not time_entry_id:
+            continue
+
+        # Skip deleted entries
+        if entry.get("deleted") == True:
+            continue
+
+        entriesItem = {
+            "employeeId": employee_id,
+            "toastTimeEntryId": time_entry_id,
+            "businessDate": entry.get("businessDate"),
+            "clockIn": entry.get("inDate"),
+            "clockOut": entry.get("outDate"),
+            "regularHours": entry.get("regularHours") or 0,
+            "overtimeHours": entry.get("overtimeHours") or 0,
+            "hourlyWage": entry.get("hourlyWage")
+        }
+
+        # Add to dictionary using Toast GUID
+        entries_dictionary[time_entry_id] = entriesItem
+
+    return entries_dictionary
+
+# # # # # # # #
+# todo just upload the dictionary simiar to upload orders
+# use the timeEntryId as the index
+# ensure it is a document in firestore
+def upload_TimeEntries(entries_dictionary, business_id):
+
+# # # # # # # #
+# This is a hareder one
+# use some weekly call to call this every sunday(?) morning to 
+# ensure those working after midnight have time to clock out
+# will also coincide with update_labor
+# 
+# considering nesting inside the timeEntries pipeline since 
+# it will need most of the same data but it may be easier just 
+# to query it from db
+# 
+# todo
+# calculate weekly values and put them in 
+# business/labor/{weekInterval}
+def pipeline_Labor(laborJSON):
+    print("Creating Dictionary . . . .")
+    
+    labor_dictionary = {}
+
+    for entry in laborJSON:
+
+        # get the employee id's
+        employee = entry.get("employeeReference") or {}
+        employee_id = employee.get("guid")
+
+        # get associated time entries
+        time_entry_id = entry.get("guid")
+
+        # Skip deleted entries
+        if entry.get["deleted"] == True:
+            continue
+
+        laborItem = {
+
+        }
+        
+        # add to dictionary using toast guid
+        labor_dictionary[time_entry_id] = laborItem
+
+            
+    return labor_dictionary
+
+
+# # # # # # # #
+# todo
+# use this in the case where there is an incomplete report
+# a manual update function where itll take a report week 
+# mini dictionary as input
+# 
+# 
+def update_labor():
+
+#endregion
+
+
+#region Reports and Adjecent Fucnts
+
+# # # # # # # #
+# populates the reports document in the db
+# is used to shorthand the queries of daily and weekly
+# earnings to simplyfy graph creation and feed it to the ai
+# 
+# daily will push dictionary in the format
+# businesses/{business_id}/reports/{date}
+# {date}: {
+#       "dailysa"
+#   }
+# 
+# weekly will push dictionary in the format
+# businesses/{business_id}/reports/{reportWeek}
+def genereate_report_daily(business_id):
+    date = today
+    dothings(date)
+
+def genereate_report_weekly(weekId, business_id):
+
+# endregion
 @app.route('/synicdata')
 def API_SYNC_Button():
     # Get the last date that was added to the DB
@@ -292,21 +431,3 @@ def get_sales():
 if __name__ == '__main__':
     print(app.url_map)
     app.run(port=5000, debug=True)
-
-
-
-
-
-def upload_orders(order_dictionary, business_id):
-
-    orders_ref = (
-        db.collection("businesses")
-          .document(business_id)
-          .collection("orders")
-    )
-
-    for date_data in order_dictionary.values():
-        for order_id, order_data in date_data["orders"].items():
-
-            orders_ref.document(order_id).set(order_data)
-
