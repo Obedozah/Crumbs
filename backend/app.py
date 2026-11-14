@@ -16,9 +16,18 @@ import bcrypt
 import json
 from flask import Flask, request, jsonify
 from datetime import datetime, date, timezone, timedelta
+from datetime import date, datetime
+import json
 from zoneinfo import ZoneInfo
+
+import bcrypt
+import firebase_admin
+from firebase_admin import credentials, firestore, initialize_app
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from firebase_admin import credentials, initialize_app, firestore
+import requests
+
 from firebase_config import db
 from dotenv import load_dotenv
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -36,6 +45,9 @@ CORS(app, origins=["http://localhost:5173"])
 # cred = credentials.Certificate("serviceAccountKey.json") # Add Key
 # firebase_admin.initialize_app(cred)
 
+@app.route('/test')
+def test():
+    return "sup"
 
 
 def socal_date(startend=None):
@@ -104,6 +116,28 @@ def API_token():
 
     return(token) #return this token for other functions
     
+def toastAPI_menu():
+    """Get the restaurant's menu data from the Toast API.
+
+    Returns:
+        dict: The Toast menu response, including menus, groups, and items.
+
+    """
+    token = API_token()
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Toast-Restaurant-External-ID": "f8510642-286e-49c4-a5f9-31b00dd0433b" # Restaurant GUID
+    }
+
+    menu_url = "https://ws-api.toasttab.com/menus/v2/menus"
+    menu_response = requests.get(menu_url, headers=headers, timeout=30)
+    menu_response.raise_for_status()
+    all_menu = menu_response.json()
+
+    return all_menu
+
 
 def toastAPI_labor():
     """
@@ -325,6 +359,46 @@ def pipeline_orders(ordersJSON):
 
     return order_dictionary
 
+def pipeline_menu(menuJSON):
+    """Turns a Toast menu response into a dictionary of menu items keyed by GUID.
+
+    Args:
+        menuJSON (dict): Toast menu response containing a menus list.
+            Items must include guid and name.
+
+    Returns:s
+        dict: Menu items grouped by GUID, with each item's Toast ID, name,
+            category, price, and active status.
+    """
+    menu_dictionary = {"menuItems": {}}
+
+    def add_group(group):
+        """Recursively add a group's items and subgroups to menu_dictionary."""
+        for item in group.get("menuItems") or []:
+            itemId = item["guid"]
+            active = bool(item.get("visibility"))
+            if itemId in menu_dictionary["menuItems"]:
+                menu_dictionary["menuItems"][itemId]["active"] |= active
+                continue
+
+            salesCategory = item.get("salesCategory") or {}
+            menu_dictionary["menuItems"][itemId] = {
+                "toastItemId": itemId,
+                "name": item["name"],
+                "category": salesCategory.get("name") or group.get("name"),
+                "price": item.get("price"),
+                "active": active,
+            }
+
+        for subgroup in group.get("menuGroups") or []:
+            add_group(subgroup)
+
+    for menu in menuJSON["menus"]:
+        add_group(menu)
+
+    return menu_dictionary
+
+
 
 @app.route('/synicdata')
 def API_SYNC_Button():
@@ -337,7 +411,12 @@ def API_SYNC_Button():
     # upload_orders(order_dictionary, "business_abc123")
     return order_dictionary
 
+    menu_dictionary = pipeline_menu(toastAPI_menu())
 
+@app.route('/getmenu')
+def get_menu():
+    data = pipeline_menu(toastAPI_menu())
+    return data["menuItems"]
 
 
 @app.route('/pushsales')
