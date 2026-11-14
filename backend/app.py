@@ -74,6 +74,12 @@ def API_token():
     return(token) #return this token for other functions
     
 def toastAPI_menu():
+    """Get the restaurant's menu data from the Toast API.
+
+    Returns:
+        dict: The Toast menu response, including menus, groups, and items.
+
+    """
     token = API_token()
 
     headers = {
@@ -288,9 +294,20 @@ def pipline_orders(ordersJSON):
     return order_dictionary
 
 def pipeline_menu(menuJSON):
+    """Turns a Toast menu response into a dictionary of menu items keyed by GUID.
+
+    Args:
+        menuJSON (dict): Toast menu response containing a menus list.
+            Items must include guid and name.
+
+    Returns:s
+        dict: Menu items grouped by GUID, with each item's Toast ID, name,
+            category, price, and active status.
+    """
     menu_dictionary = {"menuItems": {}}
 
     def add_group(group):
+        """Recursively add a group's items and subgroups to menu_dictionary."""
         for item in group.get("menuItems") or []:
             itemId = item["guid"]
             active = bool(item.get("visibility"))
