@@ -1,3 +1,21 @@
+"""
+Module Name: app.py
+Date: 11/13/2026
+Programmers: Jerry Ochoa, Eric Davoodi, Victor Perez
+
+This module contains the functions api calls for the firebase database and POS data.
+main functions include: Retrieving raw data from POS endpoints, Running extraction
+pipelines to filter and format relevant records, and Managing database connections
+to push and fetch records in Firebase.
+
+"""
+import os
+import firebase_admin
+import requests
+import bcrypt
+import json
+from flask import Flask, request, jsonify
+from datetime import datetime, date, timezone, timedelta
 from datetime import date, datetime
 import json
 from zoneinfo import ZoneInfo
@@ -7,11 +25,12 @@ import firebase_admin
 from firebase_admin import credentials, firestore, initialize_app
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+from firebase_admin import credentials, initialize_app, firestore
 import requests
 
 from firebase_config import db
-import os
 from dotenv import load_dotenv
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 # API Keys
 load_dotenv()
@@ -21,12 +40,27 @@ clientSecret = os.getenv('clientSecret')
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
 
+
+# firebase connection
+# cred = credentials.Certificate("serviceAccountKey.json") # Add Key
+# firebase_admin.initialize_app(cred)
+
 @app.route('/test')
 def test():
     return "sup"
 
 
-def socalDate(startend=None):
+def socal_date(startend=None):
+    """
+    Function Name: socal_date
+    Programmer: Jerry Ochoa
+
+    This function is used to return a formatted current date to use when calling the POS API
+    that requires a date range. This function takes in one text parameter of start or end that will
+    return the date with a start of the day or end of the day time stamp. Leaving the parameter empty
+    will return the current date without a time stamp.
+
+    """
     socal_tz = ZoneInfo("America/Los_Angeles")
     today = datetime.now(socal_tz)
 
@@ -52,6 +86,15 @@ def socalDate(startend=None):
 
 
 def API_token():
+    """
+    Function Name: API_token
+    Programmer: Jerry Ochoa
+    
+    This function is used to retrieve the login token for the Toast POS.
+    This token is needed when calling the POS API.
+
+    """
+    
     token_url = "https://ws-api.toasttab.com/authentication/v1/authentication/login" #to get the token
 
     payload = { ## Secret Keys from toast
@@ -97,7 +140,12 @@ def toastAPI_menu():
 
 
 def toastAPI_labor():
-    
+    """
+    Function Name: toastAPI_labor
+    Programmer: Jerry Ochoa
+       
+    This function is used to retrieve labor data from a given date range.    
+    """
     ######################################
     token = API_token()
     ######################################
@@ -115,8 +163,8 @@ def toastAPI_labor():
 
     ## so we can loops through the pages
     params = {
-        "startDate": socalDate("start"),
-        "endDate": socalDate("end"),
+        "startDate": socal_date("start"),
+        "endDate": socal_date("end"),
     }
 
     labor_response = requests.get(labor_url, headers=headers,params=params) #API Call
@@ -126,6 +174,15 @@ def toastAPI_labor():
 
 
 def toastAPI_orders():
+    """
+    Function Name: toastAPI_orders
+    Programmer: Jerry Ochoa
+        
+    This function is used to retrieve sales data from a given date range.
+    The JSON only returns a page of 100 orders at a time so this function
+    loops through page by page putting all the orders into an array.
+    This is so we can later extract the needed information through a pipeline.
+    """
     ######################################
     token = API_token()
     ######################################
@@ -145,8 +202,8 @@ def toastAPI_orders():
     pageNumber = 1
     while True:            
         params = {
-            "startDate": socalDate("start"),
-            "endDate": socalDate("end"),
+            "startDate": socal_date("start"),
+            "endDate": socal_date("end"),
             "pageSize": 100,
             "page": pageNumber
         }
@@ -165,19 +222,28 @@ def toastAPI_orders():
     return all_orders
 
 
-def pipline_orders(ordersJSON):
+def pipeline_orders(ordersJSON):
+    """
+    Function Name: pipeline_orders
+    Programmer: Jerry Ochoa
+            
+    This function is used to filter and organize the important data from
+    the JSON information given to us by the Toast API call. After this data
+    is orgainized it can then be added into our database.
+    """
     print("Creating Dictionary . . . .")
 
     order_dictionary = {}
 
     for order in ordersJSON:
+        currentDate = socal_date() 
         ## As long as the order is not voided
         if order["voided"] == False: 
             ## If the date is not in the dictionary yet
             # todayDate = order["openedDate"]
-            if socalDate() not in order_dictionary:
-                order_dictionary[socalDate()] = {
-                    "orders": [],
+            if currentDate not in order_dictionary:
+                order_dictionary[currentDate] = {
+                    "orders": {},
                     # "labor": [],                
                 }
 
@@ -188,7 +254,6 @@ def pipline_orders(ordersJSON):
                             {
                                 "amount": order["checks"][0]["amount"], # check ammount
                                 "appliedDiscounts": order["checks"][0]["appliedDiscounts"],
-                                "closedDate": order["checks"][0]["closedDate"],
                                 "createDate": order["checks"][0]["createdDate"],
                                 "customer": order["checks"][0]["customer"], # prob wont need
                                 "payments": [],
@@ -200,7 +265,7 @@ def pipline_orders(ordersJSON):
                             }
                         ],
                         "closedDate": order["checks"][0]["closedDate"],
-                        "createdDate": order["checks"][0]["createdDate"],
+                        "createdDate": currentDate,
                         "guid": order["guid"],
                         "modifiedDate": order["modifiedDate"],
                         "openedDate": order["openedDate"],
@@ -289,7 +354,8 @@ def pipline_orders(ordersJSON):
                 orderItem["checks"][0]["selections"].append(selectItems)
 
             #4 Adding the orders to the main Dictionary
-            order_dictionary[socalDate()]["orders"].append(orderItem)
+            # order_dictionary[socal_date()]["orders"].append(orderItem)
+            order_dictionary[currentDate]["orders"][orderItem["guid"]] = orderItem
 
     return order_dictionary
 
@@ -340,8 +406,10 @@ def API_SYNC_Button():
     # Add all days till the current Day
     # If Date exist update date by adding the new orders to it(last date added == today) - if we missed some data before store close
 
-    order_dictionary = pipline_orders( toastAPI_orders() )
+    order_dictionary = pipeline_orders( toastAPI_orders() )
     upload_orders(order_dictionary, "business_abc123")
+    # upload_orders(order_dictionary, "business_abc123")
+    return order_dictionary
 
     menu_dictionary = pipeline_menu(toastAPI_menu())
 
@@ -351,15 +419,31 @@ def get_menu():
     return data["menuItems"]
 
 
-@app.route('/getsales')
-def get_sales():
-    data = pipline_orders( toastAPI_orders() )
+@app.route('/pushsales')
+def push_sales():
+    data = pipeline_orders( toastAPI_orders() )
     return data["sales"]
 
 
-if __name__ == '__main__':
-    print(app.url_map)
-    app.run(port=5000, debug=True)
+@app.route('/getSales')
+def get_sales():
+    start = datetime(2026,10,3, tzinfo=timezone.utc)
+    end = datetime(2026,11,9, tzinfo=timezone.utc)
+
+
+    query = firestore.client().collection("businesses/business_abc123/orders")
+    query = query.where(
+        filter=FieldFilter("createdDate", ">=", start)
+    )
+    query = query.where(
+        filter=FieldFilter("createdDate", "<", end)
+    )
+    docs = query.stream()
+
+    return jsonify([
+        {"id": doc.id, **doc.to_dict()}
+        for doc in docs
+    ])
 
 
 
@@ -378,3 +462,8 @@ def upload_orders(order_dictionary, business_id):
 
             orders_ref.document(order_id).set(order_data)
 
+
+
+if __name__ == '__main__':
+    print(app.url_map)
+    app.run(port=5000, debug=True)
