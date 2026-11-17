@@ -37,11 +37,6 @@ clientSecret = os.getenv('clientSecret')
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
 
-
-# firebase connection
-# cred = credentials.Certificate("serviceAccountKey.json") # Add Key
-# firebase_admin.initialize_app(cred)
-
 @app.route('/test')
 def test():
     return "sup"
