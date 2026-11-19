@@ -1,4 +1,5 @@
 from firebase_config import db
+from firebase_admin import firestore
 from zoneinfo import ZoneInfo
 from datetime import datetime, date, timezone, timedelta
 
@@ -175,7 +176,7 @@ def pipeline_orders(ordersJSON):
     return order_dictionary
 
 def upload_orders(order_dictionary, business_id):
-
+    
     orders_ref = (
         db.collection("businesses")
           .document(business_id)
@@ -186,6 +187,49 @@ def upload_orders(order_dictionary, business_id):
         for order_id, order_data in date_data["orders"].items():
 
             orders_ref.document(order_id).set(order_data)
+
+def upload_dailyReport(order_dictionary, business_id):
+    orders_ref = (
+        db.collection("businesses")
+          .document(business_id)
+          .collection("reports")
+    )
+
+    totals = calc_daily(order_dictionary)
+    orders_ref.document(socal_date()).set(totals)
+
+def calc_daily(order_dictionary):
+    totals = {
+        "total_tips": 0,
+        "total_sales": 0
+    }
+    for date_string, date_data in order_dictionary.items():
+        orders = date_data.get("orders", {})
+        for order_id, order_details in orders.items():
+            print("----------------------------------------")
+            print(f"ID: {order_id}")
+            for check in order_details.get("checks", []):
+                for paym in check.get("payments", []):
+                    totals["total_sales"] += paym.get("amount")
+                    print(f"Amount from dictionary: {paym.get("amount")}")
+                    totals["total_tips"] += paym.get("tipAmount")
+                    print(f"Amount tips from dictionary: {paym.get("tipAmount")}")
+    
+    totals["total_sales"] = round(totals["total_sales"], 2)
+    totals["total_tips"] = round(totals["total_tips"], 2)
+    return totals
+
+def upload_dailyReport(order_dictionary, business_id):
+    orders_ref = (
+        db.collection("businesses")
+          .document(business_id)
+          .collection("reports")
+    )
+
+    totals = calc_daily(order_dictionary)
+    print(totals)
+    orders_ref.document(f"daily_{socal_date()}").set(totals)
+
 
 def pipeline_menu(menuJSON):
     """Turns a Toast menu response into a dictionary of menu items keyed by GUID.
@@ -268,33 +312,20 @@ def pipeline_TimeEntries(timeJSON):
 
 # def upload_TimeEntries(entries_dictionary, business_id):
 
-# Todo
-def pipeline_Labor(laborJSON):
-    print("Creating Dictionary . . . .")
-    
+def pipeline_Labor(tempVar, business_id):
     labor_dictionary = {}
 
-    for entry in laborJSON:
+    @firestore.transactional
+    def daily_db_write(tx):
+        labor_ref = db.document(f"businesses/{business_id}/labor/{daily_key}")
+        labor_snap = labor_ref.get(transaction=tx)
+    
+    for daily_key in labor_dictionary.items():
+        # key for the db
+        transaction = db.transaction()
 
-        # get the employee id's
-        employee = entry.get("employeeReference") or {}
-        employee_id = employee.get("guid")
-
-        # get associated time entries
-        time_entry_id = entry.get("guid")
-
-        # Skip deleted entries
-        if entry.get["deleted"] == True:
-            continue
-
-        laborItem = {
-
-        }
-        
-        # add to dictionary using toast guid
-        labor_dictionary[time_entry_id] = laborItem
+        daily_db_write(transaction)
 
     return labor_dictionary
 
-# todo
 # def update_labor():
