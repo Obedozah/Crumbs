@@ -25,6 +25,7 @@ from pathlib import Path
 
 from firebase_config import db
 from toastAPI import socal_date, toastAPI_menu, toastAPI_orders
+from pipelines import *
 from dotenv import load_dotenv
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -36,194 +37,144 @@ clientSecret = os.getenv('clientSecret')
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:5173"])
 
-
-# firebase connection
-# cred = credentials.Certificate("serviceAccountKey.json") # Add Key
-# firebase_admin.initialize_app(cred)
-
 @app.route('/test')
 def test():
     return "sup"
 
 
-
-def pipeline_orders(ordersJSON):
+def API_token():
     """
-    Function Name: pipeline_orders
+    Function Name: API_token
     Programmer: Jerry Ochoa
-            
-    This function is used to filter and organize the important data from
-    the JSON information given to us by the Toast API call. After this data
-    is orgainized it can then be added into our database.
+    
+    This function is used to retrieve the login token for the Toast POS.
+    This token is needed when calling the POS API.
+
     """
-    print("Creating Dictionary . . . .")
+    
+    token_url = "https://ws-api.toasttab.com/authentication/v1/authentication/login" #to get the token
 
-    order_dictionary = {}
+    payload = { ## Secret Keys from toast
+        "clientId": clientID,
+        "clientSecret": clientSecret,
+        "userAccessType": "TOAST_MACHINE_CLIENT"
+    }
 
-    for order in ordersJSON:
-        orderDate = socal_date(None, order["checks"][0]["createdDate"])
-        ## As long as the order is not voided
-        if order["voided"] == False: 
-            ## If the date is not in the dictionary yet
-            # todayDate = order["openedDate"]
-            if orderDate not in order_dictionary:
-                order_dictionary[orderDate] = {
-                    "orders": {},
-                    # "labor": [],                
-                }
+    auth_response = requests.post(token_url, json=payload) #API Call
+    print()
+    print("Login status:", auth_response.status_code)
 
-            # One Order - Level#1
-            orderItem = {
-                        "businessDate": order["businessDate"],
-                        "checks": [
-                            {
-                                "amount": order["checks"][0]["amount"], # check ammount
-                                "appliedDiscounts": order["checks"][0]["appliedDiscounts"],
-                                "createDate": order["checks"][0]["createdDate"],
-                                "customer": order["checks"][0]["customer"], # prob wont need
-                                "payments": [],
-                                "selections": [],
-                                "tabName": order["checks"][0]["tabName"],
-                                "taxAmount": order["checks"][0]["taxAmount"],
-                                "taxExempt": order["checks"][0]["taxExempt"],
-                                "totalAmount": order["checks"][0]["totalAmount"]
-                            }
-                        ],
-                        "closedDate": order["checks"][0]["closedDate"],
-                        "createdDate": orderDate,
-                        "guid": order["guid"],
-                        "modifiedDate": order["modifiedDate"],
-                        "openedDate": order["openedDate"],
-                        "server": {"guid": order["server"]["guid"]},
-                        "source": order["source"],
-            }
+    if auth_response.status_code != 200:
+        print(auth_response.text)
+        exit()
+    data = auth_response.json()
+    token = data["token"]["accessToken"]
+    print("-"*5 + "> Order API Successfully authenticated")
 
-            # Array of payments in a orders - Level#3 (Orders->checks->payments)
-            for payment in order["checks"][0].get("payments") or []:
-                
-                paymentItem = {
-                    "guid": payment["guid"],
-                    "amount": payment["amount"],
-                    "surchargeAmount": payment["surchargeAmount"],
-                    "tipAmount": payment["tipAmount"],
-                    "checkGuid": payment["checkGuid"],
-                    "orderGuid": payment["orderGuid"],
-                    "originalProcessingFee": payment["originalProcessingFee"],
-                    "paymentStatus": payment["paymentStatus"],
-                    "refund": payment["refund"],
-                    "refundStatus": payment["refundStatus"],
-                    # "server": {"guid": payment["server"]["guid"]}, 'NoneType' object is not subscriptable
-                    "type": payment["type"]
-                }
-                orderItem["checks"][0]["payments"].append(paymentItem)
+    return(token) #return this token for other functions
+    
+def toastAPI_menu():
+    """Get the restaurant's menu data from the Toast API.
 
-            for select in order["checks"][0].get("selections") or []:
+    Returns:
+        dict: The Toast menu response, including menus, groups, and items.
 
-                # to fix this error: 'NoneType' object is not subscriptable
-                item = select.get("item") or {}
-                item_group = select.get("itemGroup") or {}
-                ##############
-
-                selectItems = {
-                    # You need to make sure these are the right data first befor finnishing
-                    "appliedDiscounts": select["appliedDiscounts"],
-                    "appliedTaxes": select["appliedTaxes"],
-                    "displayName": select["displayName"],
-                    "item": {
-                        "guid": item.get("guid"), #select["item"]["guid"],
-                        "multiLocationId": item.get("multiLocationId") #select["item"]["multiLocationId"]
-                        },
-                    "itemGroup": {
-                        "guid": item_group.get("guid"),
-                        "multiLocationId": item_group.get("multiLocationId")
-                    },
-                    "modifiers": [], # Need to append data to this as well,
-                    "preDiscountPrice": select["preDiscountPrice"],
-                    "price": select["price"],
-                    "quantity": select["quantity"],
-                    "receiptLinePrice": select["receiptLinePrice"],
-                    "tax": select["tax"]                        
-                    }
-
-                for mods in select.get("modifiers") or []:
-
-                    # to fix this error: 'NoneType' object is not subscriptable
-                    item = mods.get("item") or {}
-                    optionGroup = mods.get("optionGroup") or {}
-                    ##############
-                    
-                    modItems = {
-                    "guid": mods["guid"],
-                    "displayName": mods["displayName"],
-                    "item": {
-                        "guid": item.get("guid"), #select["mods"]["item"]["guid"],
-                        "multiLocationId": item.get("multiLocationId") #select["mods"]["item"]["multiLocationId"]
-                    },
-                    "optionGroup": {
-                        "guid": optionGroup.get("guid"), # mods["optionGroup"]["guid"], 'NoneType' object is not subscriptable
-                        "multiLocationId": optionGroup.get("multiLocationId")  # mods["optionGroup"]["multiLocationId"] 'NoneType' object is not subscriptable
-                    },
-                    "price": mods["price"],
-                    "quantity": mods["quantity"],
-                    "receiptLinePrice": mods["receiptLinePrice"],
-                    "modifiers": [],
-                    }
-
-                    for innerMods in mods["modifiers"]:
-                        #1 Adding sub mods to mods
-                        modItems["modifiers"].append(innerMods)
-
-                    #2 Adding mods to selections[]
-                    selectItems["modifiers"].append(modItems)
-
-                #3 Adding to selections to check[]     
-                orderItem["checks"][0]["selections"].append(selectItems)
-
-            #4 Adding the orders to the main Dictionary
-            # order_dictionary[socal_date()]["orders"].append(orderItem)
-            order_dictionary[orderDate]["orders"][orderItem["guid"]] = orderItem
-
-    return order_dictionary
-
-
-def pipeline_menu(menuJSON):
-    """Turns a Toast menu response into a dictionary of menu items keyed by GUID.
-
-    Args:
-        menuJSON (dict): Toast menu response containing a menus list.
-            Items must include guid and name.
-
-    Returns:s
-        dict: Menu items grouped by GUID, with each item's Toast ID, name,
-            category, price, and active status.
     """
-    menu_dictionary = {"menuItems": {}}
+    token = API_token()
 
-    def add_group(group):
-        """Recursively add a group's items and subgroups to menu_dictionary."""
-        for item in group.get("menuItems") or []:
-            itemId = item["guid"]
-            active = bool(item.get("visibility"))
-            if itemId in menu_dictionary["menuItems"]:
-                menu_dictionary["menuItems"][itemId]["active"] |= active
-                continue
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Toast-Restaurant-External-ID": "f8510642-286e-49c4-a5f9-31b00dd0433b" # Restaurant GUID
+    }
 
-            salesCategory = item.get("salesCategory") or {}
-            menu_dictionary["menuItems"][itemId] = {
-                "toastItemId": itemId,
-                "name": item["name"],
-                "category": salesCategory.get("name") or group.get("name"),
-                "price": item.get("price"),
-                "active": active,
-            }
+    menu_url = "https://ws-api.toasttab.com/menus/v2/menus"
+    menu_response = requests.get(menu_url, headers=headers, timeout=30)
+    menu_response.raise_for_status()
+    all_menu = menu_response.json()
 
-        for subgroup in group.get("menuGroups") or []:
-            add_group(subgroup)
+    return all_menu
 
-    for menu in menuJSON["menus"]:
-        add_group(menu)
+def toastAPI_labor():
+    """
+    Function Name: toastAPI_labor
+    Programmer: Jerry Ochoa
+       
+    This function is used to retrieve labor data from a given date range.    
+    """
+    ######################################
+    token = API_token()
+    ######################################
 
-    return menu_dictionary
+    # we got the token now we can move on to the orders_URL
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Toast-Restaurant-External-ID": "f8510642-286e-49c4-a5f9-31b00dd0433b" #Restaurant GUID
+    }
+#########################################################################################################################################
+    
+    # Labor Entries
+    labor_url = "https://ws-api.toasttab.com/labor/v1/timeEntries"
+
+    ## so we can loops through the pages
+    params = {
+        "startDate": socal_date("start"),
+        "endDate": socal_date("end"),
+    }
+
+    labor_response = requests.get(labor_url, headers=headers,params=params) #API Call
+    all_labor = labor_response.json()
+
+    return all_labor
+
+def toastAPI_orders():
+    """
+    Function Name: toastAPI_orders
+    Programmer: Jerry Ochoa
+        
+    This function is used to retrieve sales data from a given date range.
+    The JSON only returns a page of 100 orders at a time so this function
+    loops through page by page putting all the orders into an array.
+    This is so we can later extract the needed information through a pipeline.
+    """
+    ######################################
+    token = API_token()
+    ######################################
+
+    # with token we can login and use orders_URL
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Toast-Restaurant-External-ID": "f8510642-286e-49c4-a5f9-31b00dd0433b" #Restaurant GUID
+    }
+
+    ############################################################
+    all_orders = [] # gets orders from all pages
+    ############################################################
+
+    ## so we can loops through the pages
+    pageNumber = 1
+    while True:            
+        params = {
+            "startDate": socal_date("start"),
+            "endDate": socal_date("end"),
+            "pageSize": 100,
+            "page": pageNumber
+        }
+    
+        orders_url = "https://ws-api.toasttab.com/orders/v2/ordersBulk"
+        orders_response = requests.get(orders_url, headers=headers,params=params) #API Call
+        orders = orders_response.json()
+        all_orders.extend(orders)
+
+        nextPage_Check = orders_response.headers.get("link", "")
+        if 'rel="next"' not in nextPage_Check:
+            break
+        pageNumber += 1
+
+    # Returns JSON
+    return all_orders
 
 
 @app.route('/synicdata')
