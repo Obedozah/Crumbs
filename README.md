@@ -2,7 +2,7 @@
 
 A budgeting and analytics companion app for restaurants and small businesses.
 
-Senior Design Project — Fall 2026
+Senior Design Project — Fall 2026 - Spring 2027
 
 Crumbs connects to a restaurant's Toast POS account to pull sales, labor, and transaction data, then turns it into dashboards, inventory tracking, and business insights for restaurant owners.
 
